@@ -33,7 +33,7 @@ def parse_args():
     parser.add_argument('--image-size', type=int, required=True)
     parser.add_argument('--enet-type', type=str, required=True)
     parser.add_argument('--batch-size', type=int, default=64)
-    parser.add_argument('--num-workers', type=int, default=32)
+    parser.add_argument('--num-workers', type=int, default=2)
     parser.add_argument('--out-dim', type=int, default=9)
     parser.add_argument('--use-amp', action='store_true')
     parser.add_argument('--use-meta', action='store_true')
@@ -72,8 +72,7 @@ def main():
     for fold in range(5):
 
         if args.eval == 'best':
-            model_file = 
-            os.path.join(args.model_dir, f'{args.kernel_type}_best_fold{fold}.pth')
+            model_file = os.path.join(args.model_dir, f'{args.kernel_type}_best_fold{fold}.pth')
         elif args.eval == 'best_20':
             model_file = os.path.join(args.model_dir, f'{args.kernel_type}_best_20_fold{fold}.pth')
         if args.eval == 'final':
