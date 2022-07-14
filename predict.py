@@ -18,12 +18,13 @@ from torch.optim import lr_scheduler
 from torch.utils.data.sampler import RandomSampler, SequentialSampler
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from util import GradualWarmupSchedulerV2
-import apex
-from apex import amp
+# import apex
+# from apex import amp
 from dataset import get_df, get_transforms, MelanomaDataset
 from models import Effnet_Melanoma, Resnest_Melanoma, Seresnext_Melanoma
 from train import get_trans
 
+import wandb
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -72,8 +73,7 @@ def main():
     for fold in range(5):
 
         if args.eval == 'best':
-            model_file = 
-            os.path.join(args.model_dir, f'{args.kernel_type}_best_fold{fold}.pth')
+            model_file = os.path.join(args.model_dir, f'{args.kernel_type}_best_fold{fold}.pth')
         elif args.eval == 'best_20':
             model_file = os.path.join(args.model_dir, f'{args.kernel_type}_best_20_fold{fold}.pth')
         if args.eval == 'final':
@@ -133,11 +133,11 @@ def main():
 
 
 if __name__ == '__main__':
-
+    start_time = time.time()
     args = parse_args()
     os.makedirs(args.sub_dir, exist_ok=True)
     os.environ['CUDA_VISIBLE_DEVICES'] = args.CUDA_VISIBLE_DEVICES
-
+    
     if args.enet_type == 'resnest101':
         ModelClass = Resnest_Melanoma
     elif args.enet_type == 'seresnext101':
@@ -152,3 +152,6 @@ if __name__ == '__main__':
     device = torch.device('cuda')
 
     main()
+    
+    total_time = (start_time-time.time())/60**2
+    print( args.kernel_type+'\t\t{:<2.4f} hours'.format(total_time))
