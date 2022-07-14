@@ -16,10 +16,11 @@ from torch.optim import lr_scheduler
 from torch.utils.data.sampler import RandomSampler, SequentialSampler
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from util import GradualWarmupSchedulerV2
-import apex
-from apex import amp
+# import apex
+# from apex import amp
 from dataset import get_df, get_transforms, MelanomaDataset
 from models import Effnet_Melanoma, Resnest_Melanoma, Seresnext_Melanoma
+import wandb
 
 
 def parse_args():
@@ -30,7 +31,7 @@ def parse_args():
     parser.add_argument('--image-size', type=int, required=True)
     parser.add_argument('--enet-type', type=str, required=True)
     parser.add_argument('--batch-size', type=int, default=64)
-    parser.add_argument('--num-workers', type=int, default=32)
+    parser.add_argument('--num-workers', type=int, default=8)
     parser.add_argument('--init-lr', type=float, default=3e-5)
     parser.add_argument('--out-dim', type=int, default=9)
     parser.add_argument('--n-epochs', type=int, default=15)
@@ -56,37 +57,50 @@ def set_seed(seed=0):
     torch.backends.cudnn.deterministic = True
 
 
-def train_epoch(model, loader, optimizer):
+def get_loss(data, target, model, meta=None):
+    if not args.use_amp:
+        logits = model(data, meta if args.use_meta else None)
+        loss = criterion(logits, target)
+    else:
+        with torch.cuda.amp.autocast():
+            logits = model(data, meta if args.use_meta else None)
+            loss = criterion(logits, target)
+    return loss
 
+
+def train_epoch(model, loader, optimizer):
+    if args.use_amp:
+        scaler = torch.cuda.amp.GradScaler()
     model.train()
     train_loss = []
     bar = tqdm(loader)
     for (data, target) in bar:
-
         optimizer.zero_grad()
         
         if args.use_meta:
             data, meta = data
             data, meta, target = data.to(device), meta.to(device), target.to(device)
-            logits = model(data, meta)
+            loss = get_loss(data, target, model, meta)
         else:
             data, target = data.to(device), target.to(device)
-            logits = model(data)        
+            loss = get_loss(data, target, model)
         
-        loss = criterion(logits, target)
-
         if not args.use_amp:
             loss.backward()
         else:
-            with amp.scale_loss(loss, optimizer) as scaled_loss:
-                scaled_loss.backward()
+            scaler.scale(loss).backward()
 
         if args.image_size in [896,576]:
             torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
-        optimizer.step()
+        if not args.use_amp:
+            optimizer.step()
+        else:
+            scaler.step(optimizer)
+            scaler.update()
 
         loss_np = loss.detach().cpu().numpy()
         train_loss.append(loss_np)
+        wandb.log({'train loss': loss_np})
         smooth_loss = sum(train_loss[-100:]) / min(len(train_loss), 100)
         bar.set_description('loss: %.5f, smth: %.5f' % (loss_np, smooth_loss))
 
@@ -171,8 +185,10 @@ def run(fold, df, meta_features, n_meta_features, transforms_train, transforms_v
 
     dataset_train = MelanomaDataset(df_train, 'train', meta_features, transform=transforms_train)
     dataset_valid = MelanomaDataset(df_valid, 'valid', meta_features, transform=transforms_val)
-    train_loader = torch.utils.data.DataLoader(dataset_train, batch_size=args.batch_size, sampler=RandomSampler(dataset_train), num_workers=args.num_workers)
-    valid_loader = torch.utils.data.DataLoader(dataset_valid, batch_size=args.batch_size, num_workers=args.num_workers)
+    train_loader = torch.utils.data.DataLoader(dataset_train, batch_size=args.batch_size,
+                                               sampler=RandomSampler(dataset_train), num_workers=args.num_workers)
+    valid_loader = torch.utils.data.DataLoader(dataset_valid, batch_size=args.batch_size, 
+                                               num_workers=args.num_workers)
 
     model = ModelClass(
         args.enet_type,
@@ -192,8 +208,7 @@ def run(fold, df, meta_features, n_meta_features, transforms_train, transforms_v
     model_file3 = os.path.join(args.model_dir, f'{args.kernel_type}_final_fold{fold}.pth')
 
     optimizer = optim.Adam(model.parameters(), lr=args.init_lr)
-    if args.use_amp:
-        model, optimizer = amp.initialize(model, optimizer, opt_level="O1")
+    
     if DP:
         model = nn.DataParallel(model)
 #     scheduler_cosine = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.n_epochs - 1)
@@ -249,6 +264,7 @@ def main():
 if __name__ == '__main__':
 
     args = parse_args()
+    wandb.init(project="melanoma", name=f'{args.kernel_type}_{args.data_folder}_')
     os.makedirs(args.model_dir, exist_ok=True)
     os.makedirs(args.log_dir, exist_ok=True)
     os.environ['CUDA_VISIBLE_DEVICES'] = args.CUDA_VISIBLE_DEVICES
