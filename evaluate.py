@@ -18,8 +18,8 @@ from torch.optim import lr_scheduler
 from torch.utils.data.sampler import RandomSampler, SequentialSampler
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from util import GradualWarmupSchedulerV2
-import apex
-from apex import amp
+# import apex
+# from apex import amp
 from dataset import get_df, get_transforms, MelanomaDataset
 from models import Effnet_Melanoma, Resnest_Melanoma, Seresnext_Melanoma
 from train import get_trans
