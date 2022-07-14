@@ -1,0 +1,9 @@
+/weights
+/data
+/wandb
+*.pth
+/logs
+*.ipynb
+/__pycache__
+/src
+/.ipynb*
