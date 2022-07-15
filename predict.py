@@ -7,8 +7,8 @@ import pandas as pd
 import cv2
 import PIL.Image
 from tqdm import tqdm
-from sklearn.metrics import roc_auc_score
-from sklearn.model_selection import StratifiedKFold
+# from sklearn.metrics import roc_auc_score
+# from sklearn.model_selection import StratifiedKFold
 import torch
 from torch.utils.data import DataLoader, Dataset
 import torch.nn as nn
@@ -17,14 +17,15 @@ import torch.optim as optim
 from torch.optim import lr_scheduler
 from torch.utils.data.sampler import RandomSampler, SequentialSampler
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from util import GradualWarmupSchedulerV2
+
+# from util import GradualWarmupSchedulerV2
 # import apex
 # from apex import amp
 from dataset import get_df, get_transforms, MelanomaDataset
 from models import Effnet_Melanoma, Resnest_Melanoma, Seresnext_Melanoma
 from train import get_trans
 
-import wandb
+# import wandb
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -46,6 +47,7 @@ def parse_args():
     parser.add_argument('--n-test', type=int, default=8)
     parser.add_argument('--CUDA_VISIBLE_DEVICES', type=str, default='0')
     parser.add_argument('--n-meta-dim', type=str, default='512,128')
+    parser.add_argument('--n-models', type=int, choices=np.arange(1,6), default=5)
 
     args, _ = parser.parse_known_args()
     return args
@@ -70,7 +72,7 @@ def main():
 
     # load model
     models = []
-    for fold in range(5):
+    for fold in range(args.n_models):
 
         if args.eval == 'best':
             model_file = os.path.join(args.model_dir, f'{args.kernel_type}_best_fold{fold}.pth')
